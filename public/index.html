@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NMA Precision Suite PRO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { margin: 0; background: #0f172a; color: white; font-family: -apple-system, sans-serif; display: flex; overflow: hidden; }
+        #sidebar { width: 480px; background: #1e293b; display: flex; flex-direction: column; height: 100vh; z-index: 10; border-right: 1px solid #334155; }
+        .header { padding: 20px 25px 0 25px; }
+        h1 { font-size: 1.6rem; margin: 0 0 5px 0; color: #f8fafc; font-style: italic; font-weight: 900; letter-spacing: -1px; }
+        .tabs { display: flex; border-bottom: 2px solid #334155; flex-wrap: wrap; margin-top: 15px; }
+        .tab-btn { flex: 1 1 30%; background: transparent; color: #94a3b8; border: none; padding: 10px 2px; cursor: pointer; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; }
+        .tab-btn.active { color: #4ade80; border-bottom: 2px solid #4ade80; background: #0f172a; }
+        .tab-content { padding: 20px 25px; overflow-y: auto; flex-grow: 1; display: none; }
+        .tab-content.active { display: block; }
+        .input-group { margin-bottom: 12px; }
+        label { display: block; font-size: 0.7rem; color: #94a3b8; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px; box-sizing: border-box; }
+        .btn-main { background: #4ade80; color: #0f172a; border: none; padding: 15px; font-weight: 800; border-radius: 6px; cursor: pointer; width: 100%; font-size: 1rem; margin-top: 10px;}
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <div class="header">
+            <h1>NMA SUITE PRO</h1>
+            <div class="tabs">
+                <button class="tab-btn active" onclick="openTab('tab-scavi', this)">1. Scavi</button>
+                <button class="tab-btn" onclick="openTab('tab-tubi', this)">2. Tubi</button>
+                <button class="tab-btn" onclick="openTab('tab-aerea', this)">3. Aerea</button>
+                <button class="tab-btn" onclick="openTab('tab-visione', this)">4. AR</button>
+                <button class="tab-btn" onclick="openTab('tab-manuale', this)">5. ISO</button>
+                <button class="tab-btn" onclick="openTab('tab-dati', this)">6. Dati & GPS</button>
+            </div>
+        </div>
+
+        <div id="tab-scavi" class="tab-content active">
+            <div class="input-group"><label>Lunghezza (m)</label><input type="number" id="scavo-lunghezza" value="50"></div>
+            <div class="input-group"><label>Larghezza (m)</label><input type="number" id="scavo-larghezza" value="0.6"></div>
+            <div class="input-group"><label>Profondità (m)</label><input type="number" id="scavo-profondita" value="0.8"></div>
+        </div>
+
+        <div id="tab-tubi" class="tab-content">
+            <div class="input-group"><label>Materiale</label><select id="material"><option>Acciaio Zincato</option><option>PE</option></select></div>
+            <div class="input-group"><label>Misura</label><select id="pipe-size"><option value="25" data-ext="33.7">1" (DN 25)</option></select></div>
+            <div class="input-group"><label>Diametro (mm)</label><input type="text" id="diameter" value="33.7" readonly></div>
+            <div class="input-group"><label>Normativa</label><select id="standard"><option>ISO 9606-1</option><option>UNI 9737</option></select></div>
+        </div>
+
+        <div id="tab-aerea" class="tab-content">
+            <div class="input-group"><label>Accesso</label><select id="aerea-accesso"><option>Ponteggio</option><option>PLE</option></select></div>
+            <div class="input-group"><label>Zincatura</label><select id="aerea-zincatura"><option>A Caldo</option><option>Spray</option></select></div>
+        </div>
+
+        <div id="tab-visione" class="tab-content"><p style="color:#94a3b8;">Modulo AR Pronto (Richiede fotocamera smartphone)</p></div>
+        <div id="tab-manuale" class="tab-content"><p style="color:#94a3b8;">Libreria Normative ISO/UNI caricata.</p></div>
+
+        <!-- MODULO: DATI, GRAFICI E GPS -->
+        <div id="tab-dati" class="tab-content">
+            <h3 style="color: #e2e8f0; font-size: 0.9rem;">Tracciamento Cantiere</h3>
+            <div class="input-group">
+                <button class="btn-main" style="background: #3b82f6; color: white;" onclick="getGPS()">📍 Rileva Coordinate GPS</button>
+                <input type="text" id="gps-coords" value="In attesa..." readonly style="margin-top: 10px; color: #4ade80; text-align: center; font-weight:bold;">
+            </div>
+            
+            <h3 style="color: #e2e8f0; font-size: 0.9rem; margin-top: 30px;">Collaudo: Grafico Pressione (Bar)</h3>
+            <div style="background: #0f172a; padding: 10px; border: 1px solid #334155; border-radius: 6px;">
+                <canvas id="pressureChart"></canvas>
+            </div>
+        </div>
+
+        <div style="padding: 20px;"><button class="btn-main" id="btn-pdf">📄 Stampa Verbale di Collaudo</button></div>
+    </div>
+    
+    <div id="canvas-container"></div>
+
+    <script>
+        function openTab(tabName, elmnt) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            elmnt.classList.add('active');
+        }
+
+        // --- SISTEMA GPS ---
+        function getGPS() {
+            if (navigator.geolocation) {
+                document.getElementById('gps-coords').value = "Rilevamento in corso...";
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const lat = position.coords.latitude.toFixed(6);
+                    const lon = position.coords.longitude.toFixed(6);
+                    document.getElementById('gps-coords').value = lat + ", " + lon;
+                }, () => {
+                    document.getElementById('gps-coords').value = "Errore permessi GPS / Safari";
+                });
+            } else {
+                document.getElementById('gps-coords').value = "GPS Non Supportato";
+            }
+        }
+
+        // --- GRAFICO CHART.JS ---
+        const ctx = document.getElementById('pressureChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['10m', '20m', '30m', '40m', '50m'],
+                datasets: [{
+                    label: 'Pressione (Bar)',
+                    data: [1.2, 1.2, 1.19, 1.2, 1.21],
+                    borderColor: '#4ade80',
+                    backgroundColor: 'rgba(74, 222, 128, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: { scales: { y: { min: 1.0, max: 1.5 } }, plugins: { legend: { labels: { color: 'white' } } } }
+        });
+
+        // --- MOTORE 3D ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        container.appendChild(renderer.domElement);
+        const pipe = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 40, 32), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9 }));
+        pipe.rotation.z = Math.PI / 2;
+        scene.add(pipe);
+        scene.add(new THREE.AmbientLight(0xffffff, 2));
+        camera.position.set(0, 15, 35);
+        camera.lookAt(0,0,0);
+        function animate() { requestAnimationFrame(animate); pipe.rotation.x += 0.005; renderer.render(scene, camera); }
+        animate();
+
+        // --- PDF EXPORT ---
+        document.getElementById('btn-pdf').addEventListener('click', async () => {
+            const data = {
+                gps: document.getElementById('gps-coords').value,
+                scavoLunghezza: document.getElementById('scavo-lunghezza').value,
+                scavoLarghezza: document.getElementById('scavo-larghezza').value,
+                scavoProfondita: document.getElementById('scavo-profondita').value,
+                material: document.getElementById('material').value,
+                diameter: document.getElementById('diameter').value,
+                standard: document.getElementById('standard').value,
+                aereaAccesso: document.getElementById('aerea-accesso').value,
+                aereaZincatura: document.getElementById('aerea-zincatura').value
+            };
+            const response = await fetch('/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+            const blob = await response.blob();
+            const a = document.createElement('a');
+            a.href = window.URL.createObjectURL(blob);
+            a.download = 'Verbale_NMA_Suite_Pro.pdf';
+            a.click();
+        });
+    </script>
+</body>
+</html>
