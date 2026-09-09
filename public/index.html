@@ -39,7 +39,7 @@
                 <button class="tab-btn" onclick="openTab('tab-aerea', this)">3. Aerea</button>
                 <button class="tab-btn" onclick="openTab('tab-visione', this)">4. AR</button>
                 <button class="tab-btn" onclick="openTab('tab-manuale', this)">5. ISO</button>
-                <button class="tab-btn" onclick="openTab('tab-dati', this)">6. GPS</button>
+                <button class="tab-btn" onclick="openTab('tab-dati', this)">6. Dati Cantiere</button>
             </div>
         </div>
 
@@ -51,7 +51,7 @@
         </div>
 
         <div id="tab-tubi" class="tab-content">
-            <div class="input-group"><label>Materiale</label><select id="material"><option>Acciaio Zincato</option><option>PE</option></select></div>
+            <div class="input-group"><label>Materiale</label><select id="material" onchange="updatePeso(totalMeters)"><option value="Acciaio Zincato">Acciaio Zincato (2.44 kg/m)</option><option value="PE">Polietilene PE (0.3 kg/m)</option></select></div>
             <div class="input-group"><label>Diametro Nominale</label><input type="text" id="diameter" value="DN 25 (33.7mm)"></div>
             <div class="input-group"><label>Normativa</label><select id="standard"><option>ISO 9606-1</option><option>UNI 9737</option></select></div>
             <h3 style="color: #e2e8f0; font-size: 0.9rem; margin-top: 25px; border-bottom: 1px solid #334155; padding-bottom: 5px;">Costruzione Impianto (CAD)</h3>
@@ -66,12 +66,11 @@
             <div class="input-group"><label>Accesso in Quota</label><select id="aerea-accesso"><option>Ponteggio Facciata</option><option>Piattaforma Aerea (PLE)</option></select></div>
             <div class="input-group"><label>Trattamento Staffe</label><select id="aerea-zincatura"><option>Zincatura A Caldo</option><option>Spray</option></select></div>
             <div class="result-box"><div class="result-title">Staffaggio Necessario (1 ogni 1.5m)</div><div style="color: #f59e0b; font-size: 1.4rem; font-weight: 900;"><span id="calc-staffe">0</span> Pezzi</div></div>
+            <div class="result-box"><div class="result-title">Carico Strutturale Totale</div><div style="color: #ef4444; font-size: 1.4rem; font-weight: 900;"><span id="calc-peso">0.00</span> kg</div></div>
         </div>
 
-        <!-- NUOVO MODULO AR -->
         <div id="tab-visione" class="tab-content">
             <h3 style="color: #e2e8f0; font-size: 0.9rem; margin-top: 5px; border-bottom: 1px solid #334155; padding-bottom: 5px;">Allineamento AR (Realtà Aumentata)</h3>
-            <p style="font-size: 0.75rem; color: #94a3b8; margin-bottom: 20px;">Attiva la fotocamera per sovrapporre il tracciato CAD alla parete reale. Utilizza il touch per ruotare e adattare l'impianto in scala.</p>
             <button class="btn-main" id="btn-ar" onclick="toggleAR()">👁️ Attiva Fotocamera AR</button>
         </div>
         
@@ -82,7 +81,10 @@
         </div>
 
         <div id="tab-dati" class="tab-content">
-            <div class="input-group">
+            <div class="input-group"><label>Nome Cliente / Committente</label><input type="text" id="dati-cliente" placeholder="Es. Condominio Roma"></div>
+            <div class="input-group"><label>Indirizzo Cantiere</label><input type="text" id="dati-indirizzo" placeholder="Es. Via Milano 15, Torino"></div>
+            <div class="input-group"><label>Data Intervento</label><input type="date" id="dati-data"></div>
+            <div class="input-group" style="margin-top: 20px;">
                 <button class="btn-main" style="background: #3b82f6; color: white;" onclick="getGPS()">📍 Rileva Coordinate GPS</button>
                 <input type="text" id="gps-coords" value="In attesa..." readonly style="margin-top: 10px; color: #4ade80; text-align: center; font-weight:bold;">
             </div>
@@ -98,11 +100,11 @@
         </div>
     </div>
     
-    <div id="canvas-container">
-        <video id="camera-feed" autoplay playsinline></video>
-    </div>
+    <div id="canvas-container"><video id="camera-feed" autoplay playsinline></video></div>
 
     <script>
+        document.getElementById('dati-data').valueAsDate = new Date();
+
         function openTab(tabName, elmnt) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
@@ -118,6 +120,13 @@
         }
 
         function updateStaffe(metri) { document.getElementById('calc-staffe').innerText = metri > 0 ? Math.ceil(metri / 1.5) + 1 : 0; }
+        
+        function updatePeso(metri) {
+            let mat = document.getElementById('material').value;
+            let pesoMetro = mat === "Acciaio Zincato" ? 2.44 : 0.30;
+            document.getElementById('calc-peso').innerText = (metri * pesoMetro).toFixed(2);
+        }
+
         function updateISO(metri, segmenti) {
             let barre = metri > 0 ? Math.ceil(metri / 6) : 0;
             document.getElementById('calc-barre').innerText = barre;
@@ -135,103 +144,71 @@
             }
         }
 
-        // FOTOCAMERA AR
-        let arActive = false;
-        let videoStream = null;
+        let arActive = false; let videoStream = null;
         async function toggleAR() {
-            const video = document.getElementById('camera-feed');
-            const btn = document.getElementById('btn-ar');
-            
+            const video = document.getElementById('camera-feed'); const btn = document.getElementById('btn-ar');
             if (!arActive) {
                 try {
                     videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                    video.srcObject = videoStream;
-                    video.style.display = 'block';
-                    scene.background = null; // Rimuove lo sfondo blu notte
-                    btn.innerText = '🔴 Spegni Fotocamera AR';
-                    btn.style.background = '#ef4444';
-                    btn.style.color = 'white';
-                    arActive = true;
-                } catch (err) {
-                    alert("Fotocamera non accessibile in locale sul Mac o permessi negati. Funzionerà perfettamente su smartphone una volta messa online.");
-                }
+                    video.srcObject = videoStream; video.style.display = 'block'; scene.background = null; 
+                    btn.innerText = '🔴 Spegni Fotocamera AR'; btn.style.background = '#ef4444'; btn.style.color = 'white'; arActive = true;
+                } catch (err) { alert("Fotocamera non accessibile."); }
             } else {
                 if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-                video.style.display = 'none';
-                scene.background = new THREE.Color(0x0f172a); // Ripristina sfondo
-                btn.innerText = '👁️ Attiva Fotocamera AR';
-                btn.style.background = '#4ade80';
-                btn.style.color = '#0f172a';
-                arActive = false;
+                video.style.display = 'none'; scene.background = new THREE.Color(0x0f172a);
+                btn.innerText = '👁️ Attiva Fotocamera AR'; btn.style.background = '#4ade80'; btn.style.color = '#0f172a'; arActive = false;
             }
         }
 
         const container = document.getElementById('canvas-container');
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0f172a); // Sfondo iniziale
+        const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0f172a);
         const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        container.appendChild(renderer.domElement);
-        const controls = new THREE.OrbitControls(camera, renderer.domElement);
-        controls.enableDamping = true;
-        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-        scene.add(new THREE.GridHelper(100, 100, 0x334155, 0x1e293b));
+        renderer.setSize(container.clientWidth, container.clientHeight); container.appendChild(renderer.domElement);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+        scene.add(new THREE.AmbientLight(0xffffff, 1.5)); scene.add(new THREE.GridHelper(100, 100, 0x334155, 0x1e293b));
         camera.position.set(20, 20, 30);
         
-        let cadObjects = []; let currentPos = new THREE.Vector3(0, 0, 0);
-        let totalMeters = 0; let segmentCount = 0; let cadHistory = [];
+        let cadObjects = []; let currentPos = new THREE.Vector3(0, 0, 0); let totalMeters = 0; let segmentCount = 0; let cadHistory = [];
         const pipeMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.3 });
 
-        function initCAD() {
-            const origin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), new THREE.MeshBasicMaterial({color: 0xef4444}));
-            scene.add(origin); cadObjects.push(origin);
-        }
+        function initCAD() { const origin = new THREE.Mesh(new THREE.SphereGeometry(1.5, 32, 32), new THREE.MeshBasicMaterial({color: 0xef4444})); scene.add(origin); cadObjects.push(origin); }
         initCAD();
 
         function addPipeSegment(isRestoring) {
-            const lengthMm = parseFloat(document.getElementById('seg-length').value);
-            if(!lengthMm || lengthMm <= 0) return;
-            const dir = document.getElementById('seg-dir').value;
-            const units = lengthMm / 100;
-            
-            const geometry = new THREE.CylinderGeometry(1, 1, units, 32);
-            const cylinder = new THREE.Mesh(geometry, pipeMat);
+            const lengthMm = parseFloat(document.getElementById('seg-length').value); if(!lengthMm || lengthMm <= 0) return;
+            const dir = document.getElementById('seg-dir').value; const units = lengthMm / 100;
+            const geometry = new THREE.CylinderGeometry(1, 1, units, 32); const cylinder = new THREE.Mesh(geometry, pipeMat);
             let moveVec = new THREE.Vector3(0,0,0);
-            
             if (dir === 'x') { cylinder.rotation.z = Math.PI / 2; cylinder.position.set(currentPos.x + units/2, currentPos.y, currentPos.z); moveVec.set(units, 0, 0); }
             else if (dir === 'y') { cylinder.position.set(currentPos.x, currentPos.y + units/2, currentPos.z); moveVec.set(0, units, 0); }
             else if (dir === 'z') { cylinder.rotation.x = Math.PI / 2; cylinder.position.set(currentPos.x, currentPos.y, currentPos.z + units/2); moveVec.set(0, 0, units); }
-            
             scene.add(cylinder); cadObjects.push(cylinder); currentPos.add(moveVec);
-            const joint = new THREE.Mesh(new THREE.SphereGeometry(1.1, 32, 32), pipeMat);
-            joint.position.copy(currentPos); scene.add(joint); cadObjects.push(joint);
-            
-            totalMeters += lengthMm / 1000; segmentCount++;
-            if(!isRestoring) cadHistory.push({ dir: dir, lengthMm: lengthMm });
+            const joint = new THREE.Mesh(new THREE.SphereGeometry(1.1, 32, 32), pipeMat); joint.position.copy(currentPos); scene.add(joint); cadObjects.push(joint);
+            totalMeters += lengthMm / 1000; segmentCount++; if(!isRestoring) cadHistory.push({ dir: dir, lengthMm: lengthMm });
             document.getElementById('total-length').innerText = totalMeters.toFixed(2);
             document.getElementById('segment-list').innerHTML += `<li>${lengthMm}mm (Asse ${dir.toUpperCase()})</li>`;
-            controls.target.copy(currentPos); updateStaffe(totalMeters); updateISO(totalMeters, segmentCount);
+            controls.target.copy(currentPos); updateStaffe(totalMeters); updatePeso(totalMeters); updateISO(totalMeters, segmentCount);
         }
 
         function resetCAD() {
-            cadObjects.forEach(obj => scene.remove(obj)); cadObjects = []; cadHistory = [];
-            currentPos.set(0,0,0); totalMeters = 0; segmentCount = 0;
-            document.getElementById('total-length').innerText = "0.00"; document.getElementById('segment-list').innerHTML = "";
-            controls.target.set(0,0,0); updateStaffe(0); updateISO(0, 0); initCAD();
+            cadObjects.forEach(obj => scene.remove(obj)); cadObjects = []; cadHistory = []; currentPos.set(0,0,0); totalMeters = 0; segmentCount = 0;
+            document.getElementById('total-length').innerText = "0.00"; document.getElementById('segment-list').innerHTML = ""; controls.target.set(0,0,0);
+            updateStaffe(0); updatePeso(0); updateISO(0, 0); initCAD();
         }
 
         function saveProject() {
-            const data = { scavoL: document.getElementById('scavo-lunghezza').value, scavoW: document.getElementById('scavo-larghezza').value, scavoH: document.getElementById('scavo-profondita').value, material: document.getElementById('material').value, diameter: document.getElementById('diameter').value, standard: document.getElementById('standard').value, history: cadHistory };
-            const blob = new Blob([JSON.stringify(data)], {type: "application/json"});
-            const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Progetto_Cantiere.json"; a.click();
+            const data = { cliente: document.getElementById('dati-cliente').value, indirizzo: document.getElementById('dati-indirizzo').value, dataC: document.getElementById('dati-data').value, scavoL: document.getElementById('scavo-lunghezza').value, scavoW: document.getElementById('scavo-larghezza').value, scavoH: document.getElementById('scavo-profondita').value, material: document.getElementById('material').value, diameter: document.getElementById('diameter').value, standard: document.getElementById('standard').value, history: cadHistory };
+            const blob = new Blob([JSON.stringify(data)], {type: "application/json"}); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Progetto_Cantiere.json"; a.click();
         }
 
         function loadProject(event) {
-            const file = event.target.files[0]; if(!file) return;
-            const reader = new FileReader();
+            const file = event.target.files[0]; if(!file) return; const reader = new FileReader();
             reader.onload = function(e) {
                 const data = JSON.parse(e.target.result);
+                if(data.cliente) document.getElementById('dati-cliente').value = data.cliente;
+                if(data.indirizzo) document.getElementById('dati-indirizzo').value = data.indirizzo;
+                if(data.dataC) document.getElementById('dati-data').value = data.dataC;
                 document.getElementById('scavo-lunghezza').value = data.scavoL; document.getElementById('scavo-larghezza').value = data.scavoW; document.getElementById('scavo-profondita').value = data.scavoH; document.getElementById('material').value = data.material; document.getElementById('diameter').value = data.diameter; document.getElementById('standard').value = data.standard;
                 updateScavi(); resetCAD();
                 if(data.history) { data.history.forEach(seg => { document.getElementById('seg-dir').value = seg.dir; document.getElementById('seg-length').value = seg.lengthMm; addPipeSegment(true); cadHistory.push(seg); }); }
@@ -243,10 +220,18 @@
         animate(); updateScavi();
 
         document.getElementById('btn-pdf').addEventListener('click', async () => {
-            const data = { gps: document.getElementById('gps-coords').value, scavoLunghezza: document.getElementById('scavo-lunghezza').value, scavoLarghezza: document.getElementById('scavo-larghezza').value, scavoProfondita: document.getElementById('scavo-profondita').value, scavoVolume: document.getElementById('calc-volume').innerText, material: document.getElementById('material').value, diameter: document.getElementById('diameter').value, standard: document.getElementById('standard').value, metratura: document.getElementById('total-length').innerText, aereaAccesso: document.getElementById('aerea-accesso').value, aereaZincatura: document.getElementById('aerea-zincatura').value, staffePreviste: document.getElementById('calc-staffe').innerText, barre: document.getElementById('calc-barre').innerText, giunti: document.getElementById('calc-giunti').innerText, sfrido: document.getElementById('calc-sfrido').innerText };
+            const data = { 
+                cliente: document.getElementById('dati-cliente').value || 'Non specificato',
+                indirizzo: document.getElementById('dati-indirizzo').value || 'Non specificato',
+                dataCantiere: document.getElementById('dati-data').value,
+                gps: document.getElementById('gps-coords').value, 
+                scavoLunghezza: document.getElementById('scavo-lunghezza').value, scavoLarghezza: document.getElementById('scavo-larghezza').value, scavoProfondita: document.getElementById('scavo-profondita').value, scavoVolume: document.getElementById('calc-volume').innerText, 
+                material: document.getElementById('material').value, diameter: document.getElementById('diameter').value, standard: document.getElementById('standard').value, metratura: document.getElementById('total-length').innerText, 
+                aereaAccesso: document.getElementById('aerea-accesso').value, aereaZincatura: document.getElementById('aerea-zincatura').value, staffePreviste: document.getElementById('calc-staffe').innerText, pesoTotale: document.getElementById('calc-peso').innerText,
+                barre: document.getElementById('calc-barre').innerText, giunti: document.getElementById('calc-giunti').innerText, sfrido: document.getElementById('calc-sfrido').innerText 
+            };
             const response = await fetch('/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
-            const blob = await response.blob();
-            const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = 'Verbale_NMA_Suite_Pro.pdf'; a.click();
+            const blob = await response.blob(); const a = document.createElement('a'); a.href = window.URL.createObjectURL(blob); a.download = 'Verbale_NMA_Suite_Pro.pdf'; a.click();
         });
     </script>
 </body>
